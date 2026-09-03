@@ -1,0 +1,654 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cotizador Pro - Cables de Cobre</title>
+    
+    <!-- Librerías: Gráficos, Exportar Excel y Base de Datos (Firebase) -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+
+    <style>
+        :root {
+            --primary: #2563eb; --success: #16a34a; --danger: #dc2626; 
+            --bg: #f8fafc; --card: #ffffff; --text: #1e293b; --border: #cbd5e1;
+        }
+        body { font-family: system-ui, sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 15px; }
+        .container { max-width: 1100px; margin: 0 auto; }
+        
+        /* Estilos de Interfaz Limpia y Moderna */
+        header { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; margin-bottom: 20px; background: var(--card); padding: 15px; border-radius: 12px; border: 1px solid var(--border); box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
+        .auth-panel, .tools-panel { background: var(--card); padding: 12px 15px; border-radius: 10px; border: 1px solid var(--border); display: flex; align-items: center; gap: 12px; flex-wrap: wrap;}
+        
+        .search-container { background: var(--card); padding: 20px; border-radius: 12px; border: 1px solid var(--border); margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
+        .search-box { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+        
+        input, select, button { padding: 10px 14px; border: 1px solid var(--border); border-radius: 8px; font-size: 14px; outline: none; transition: all 0.2s; }
+        input:focus, select:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1); }
+        
+        button { background: var(--primary); color: white; border: none; cursor: pointer; font-weight: 600; display: inline-flex; align-items: center; gap: 6px; }
+        button:hover { opacity: 0.9; transform: translateY(-1px); }
+        button.danger { background: var(--danger); }
+        button.success { background: var(--success); }
+        
+        .table-responsive { overflow-x: auto; background: var(--card); border-radius: 12px; border: 1px solid var(--border); margin-bottom: 20px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); }
+        table { width: 100%; border-collapse: collapse; text-align: left; }
+        th, td { padding: 14px 16px; border-bottom: 1px solid var(--border); }
+        th { background: #f8fafc; font-weight: 600; color: #475569; }
+        
+        .cheapest { background-color: #f0fdf4 !important; color: #166534; }
+        .cheapest td { font-weight: bold; }
+        
+        .actions-bar { display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-bottom: 20px; }
+        .chart-container { background: var(--card); padding: 20px; border-radius: 12px; border: 1px solid var(--border); margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
+        
+        .badge { padding: 6px 10px; border-radius: 6px; font-size: 12px; font-weight: 600; }
+        .badge-admin { background: #dbeafe; color: #1e40af; }
+        .badge-read { background: #f1f5f9; color: #475569; }
+        
+        .switch-container { display: flex; align-items: center; gap: 10px; font-weight: 600; color: #334155; }
+        .switch { position: relative; display: inline-block; width: 44px; height: 24px; }
+        .switch input { opacity: 0; width: 0; height: 0; }
+        .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #cbd5e1; transition: .4s; border-radius: 24px; }
+        .slider:before { position: absolute; content: ""; height: 18px; width: 18px; left: 3px; bottom: 3px; background-color: white; transition: .4s; border-radius: 50%; }
+        input:checked + .slider { background-color: var(--primary); }
+        input:checked + .slider:before { transform: translateX(20px); }
+
+        /* Estilo para la Ventana Modal Profesional */
+        .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(15, 23, 42, 0.6); backdrop-filter: blur(4px); z-index: 1000; justify-content: center; align-items: center; padding: 15px; }
+        .modal-card { background: var(--card); width: 100%; max-width: 450px; border-radius: 16px; border: 1px solid var(--border); box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1); overflow: hidden; animation: modalIn 0.3s ease; }
+        @keyframes modalIn { from { opacity: 0; transform: translateY(15px); } to { opacity: 1; transform: translateY(0); } }
+        .modal-header { background: #f8fafc; padding: 16px 20px; border-bottom: 1px solid var(--border); font-weight: bold; font-size: 18px; color: #0f172a; display: flex; justify-content: space-between; align-items: center; }
+        .modal-body { padding: 20px; display: flex; flex-direction: column; gap: 14px; }
+        .modal-body label { font-size: 13px; font-weight: 600; color: #475569; margin-bottom: -8px; }
+        .modal-footer { padding: 12px 20px; background: #f8fafc; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; gap: 10px; }
+
+        @media print {
+            .no-print, header, .actions-bar, .chart-container { display: none !important; }
+            body { padding: 0; background: white; }
+            .table-responsive { box-shadow: none; border: none; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <header>
+        <div style="display: flex; align-items: center; gap: 10px;">
+            <span style="font-size: 24px;">⚡</span>
+            <div>
+                <h2 style="margin: 0; font-size: 20px; color: #0f172a;">Cotizador de Cables</h2>
+                <span id="syncStatus" style="font-size: 12px; color: #64748b;">🔄 Conectando...</span>
+            </div>
+        </div>
+        <div class="auth-panel no-print">
+            <span id="roleBadge" class="badge badge-read">Modo Lectura</span>
+            <input type="password" id="passInput" placeholder="Contraseña admin" style="padding: 8px 12px; width: 130px;">
+            <button onclick="toggleAuth()" id="authBtn" style="padding: 8px 14px;">Entrar</button>
+        </div>
+    </header>
+
+    <div class="tools-panel no-print" style="margin-bottom: 20px; justify-content: space-between;">
+        <div class="switch-container">
+            <span>Sin IVA</span>
+            <label class="switch">
+                <input type="checkbox" id="ivaToggle" onchange="loadData()">
+                <span class="slider"></span>
+            </label>
+            <span>CON IVA (15%)</span>
+        </div>
+        <div>
+            <input type="number" id="metrosInput" placeholder="Metros a cotizar (Ej: 100)" oninput="loadData()" style="width: 210px;">
+        </div>
+    </div>
+
+    <!-- BÚSQUEDA INTELIGENTE POR CÓDIGO O NOMBRE -->
+    <div class="search-container no-print">
+        <label style="display: block; font-size: 13px; font-weight: 600; color: #475569; margin-bottom: 8px;">BUSCAR CABLE (Por código exacto o palabras clave como "gemelo", "thhn", etc.)</label>
+        <div class="search-box">
+            <select id="codeSelect" onchange="selectCode(this.value)" style="flex: 1; min-width: 220px; font-weight: 600;">
+                <option value="">-- O elige de la lista desplegable --</option>
+            </select>
+            <input list="sugerencias-busqueda" type="text" id="searchInput" placeholder="Escribe código o nombre (Ej: gemelo)..." oninput="onSearchInput()" style="flex: 2;">
+            <datalist id="sugerencias-busqueda"></datalist>
+        </div>
+        <div id="resultadoBusquedaNombre" style="margin-top: 10px; font-size: 13px; color: #2563eb; font-weight: 500;"></div>
+    </div>
+
+    <!-- TABLA PRINCIPAL -->
+    <div class="table-responsive" id="imprimible">
+        <div style="padding: 15px 20px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; background: #fff;">
+            <div>
+                <h3 id="printTitle" style="margin: 0; font-size: 16px; color: #0f172a;">Seleccione un cable para ver precios</h3>
+                <span id="cableNombreDesc" style="font-size: 13px; color: #64748b;"></span>
+            </div>
+            <!-- Botón para editar nombre del cable actual (Solo Admin) -->
+            <button class="admin-only no-print" onclick="abrirModalEditarNombre()" style="background: #e2e8f0; color: #334155; font-size: 12px; padding: 6px 10px; display:none;">✏️ Editar Nombre</button>
+        </div>
+
+        <datalist id="lista-proveedores"></datalist>
+        <datalist id="lista-marcas"></datalist>
+
+        <table id="dataTable">
+            <thead>
+                <tr>
+                    <th>Proveedor</th>
+                    <th>Tipo</th>
+                    <th>Marca</th>
+                    <th>Precio Unitario</th>
+                    <th id="thTotal" style="display:none;">Total Metros</th>
+                    <th>Fecha</th>
+                    <th class="admin-only no-print" style="display:none;">Acciones</th>
+                </tr>
+            </thead>
+            <tbody id="tableBody">
+                <tr><td colspan="7" style="text-align:center; color: #64748b; padding: 30px;">Escribe o selecciona un cable arriba</td></tr>
+            </tbody>
+        </table>
+    </div>
+
+    <!-- ACCIONES ADMINISTRATIVAS -->
+    <div class="actions-bar no-print">
+        <div style="display: flex; gap: 10px; flex-wrap: wrap;">
+            <button class="admin-only success" onclick="addRow()" style="display:none;">+ Añadir Proveedor</button>
+            <button class="admin-only" onclick="abrirModalCrearCable()" style="background: var(--primary); display:none;">➕ Crear Nuevo Cable</button>
+            <button class="admin-only" style="background:#d97706; display:none;" onclick="document.getElementById('fileInput').click()">☁️ Subir JSON</button>
+            <input type="file" id="fileInput" style="display:none" accept=".json" onchange="importToCloud(event)">
+        </div>
+        <div style="display: flex; gap: 10px;">
+            <button onclick="window.print()" style="background: #475569;">🖨️ Imprimir / PDF</button>
+            <button style="background: #059669;" onclick="exportToExcel()">📊 Exportar Excel</button>
+        </div>
+    </div>
+
+    <div class="chart-container no-print">
+        <canvas id="priceChart"></canvas>
+    </div>
+</div>
+
+<!-- VENTANA MODAL PROFESIONAL PARA CREAR CABLE -->
+<div class="modal-overlay" id="modalCrearCable">
+    <div class="modal-card">
+        <div class="modal-header">
+            <span>Crear Nuevo Cable</span>
+            <span onclick="cerrarModal('modalCrearCable')" style="cursor:pointer; font-size: 20px; color: #94a3b8;">&times;</span>
+        </div>
+        <div class="modal-body">
+            <label>Código del Cable (Ej: C2X12, THHN10)</label>
+            <input type="text" id="modalCodigo" placeholder="Ej: C2X12">
+            
+            <label>Nombre Descriptivo (Ej: Cable Concéntrico 2x12)</label>
+            <input type="text" id="modalNombre" placeholder="Ej: Cable Concéntrico CU 2x12">
+            
+            <label>Proveedor Inicial</label>
+            <input type="text" id="modalProveedor" list="lista-proveedores" placeholder="Ej: MEGAPROFER">
+            
+            <label>Marca</label>
+            <input type="text" id="modalMarca" list="lista-marcas" placeholder="Ej: INCABLE">
+            
+            <label>Precio Unitario (USD)</label>
+            <input type="number" id="modalPrecio" step="0.0001" placeholder="0.00">
+        </div>
+        <div class="modal-footer">
+            <button onclick="cerrarModal('modalCrearCable')" style="background: #cbd5e1; color: #334155;">Cancelar</button>
+            <button onclick="guardarNuevoCableModal()" class="success">Guardar en la Nube</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    // Configuración Firebase
+    const firebaseConfig = {
+      apiKey: "AIzaSyBhGAjrCNxmim5Y2OiSE3sPh77llSVxFok",
+      authDomain: "cablesdb-39e6c.firebaseapp.com",
+      databaseURL: "https://cablesdb-39e6c-default-rtdb.firebaseio.com",
+      projectId: "cablesdb-39e6c",
+      storageBucket: "cablesdb-39e6c.firebasestorage.app",
+      messagingSenderId: "877677153961",
+      appId: "1:877677153961:web:71a06a6260a880e014a3b8"
+    };
+
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.database();
+
+    let globalData = {};
+    let isAdmin = false;
+    let chartInstance = null;
+
+    // Carga robusta compatible con celulares y PC
+    let datosCargados = false;
+
+    db.ref('cables').on('value', (snapshot) => {
+        globalData = snapshot.val() || {};
+        datosCargados = true;
+        document.getElementById('syncStatus').innerText = "✅ Sincronizado en la nube";
+        updateSelects();
+        updateDatalists();
+        loadData();
+    }, (error) => {
+        document.getElementById('syncStatus').innerText = "❌ Error de sincronización";
+        console.error("Firebase error:", error);
+    });
+
+    // Timeout de seguridad por si el internet móvil es lento al iniciar
+    setTimeout(() => {
+        if (!datosCargados && Object.keys(globalData).length === 0) {
+            document.getElementById('syncStatus').innerText = "⚠️ Modo sin conexión / Revise red";
+        }
+    }, 4000);
+
+    function saveToCloud() {
+        if (!isAdmin) return alert("Modo lectura: No puedes guardar cambios.");
+        document.getElementById('syncStatus').innerText = "⏳ Guardando...";
+        db.ref('cables').set(globalData);
+    }
+
+    function normalizar(texto) {
+        if (!texto) return "";
+        return texto.trim().toUpperCase();
+    }
+
+    function updateSelects() {
+        const select = document.getElementById('codeSelect');
+        const currentVal = select.value;
+        select.innerHTML = '<option value="">-- O elige de la lista desplegable --</option>';
+
+        const datalistBusqueda = document.getElementById('sugerencias-busqueda');
+        datalistBusqueda.innerHTML = '';
+
+        const codigosOrdenados = Object.keys(globalData).sort();
+        codigosOrdenados.forEach(codigo => {
+            const item = globalData[codigo];
+            const nombre = (item && !Array.isArray(item) && item.nombre) ? item.nombre : "";
+            
+            const opt = document.createElement('option');
+            opt.value = codigo;
+            opt.textContent = `${codigo} ${nombre ? '— ' + nombre : ''}`;
+            select.appendChild(opt);
+
+            const optSearch = document.createElement('option');
+            optSearch.value = codigo;
+            optSearch.label = nombre;
+            datalistBusqueda.appendChild(optSearch);
+        });
+
+        if (codigosOrdenados.includes(currentVal)) {
+            select.value = currentVal;
+        }
+    }
+
+    function updateDatalists() {
+        const proveedores = new Set();
+        const marcas = new Set();
+
+        Object.values(globalData).forEach(item => {
+            const listaPrecios = Array.isArray(item) ? item : (item.precios || []);
+            listaPrecios.forEach(row => {
+                if(row.provider) proveedores.add(row.provider);
+                if(row.brand) marcas.add(row.brand);
+            });
+        });
+
+        const dlProv = document.getElementById('lista-proveedores');
+        dlProv.innerHTML = "";
+        Array.from(proveedores).sort().forEach(p => dlProv.innerHTML += `<option value="${p}">`);
+
+        const dlMarcas = document.getElementById('lista-marcas');
+        dlMarcas.innerHTML = "";
+        Array.from(marcas).sort().forEach(m => dlMarcas.innerHTML += `<option value="${m}">`);
+    }
+
+    function onSearchInput() {
+        const query = document.getElementById('searchInput').value.trim().toLowerCase();
+        const resultadoDiv = document.getElementById('resultadoBusquedaNombre');
+        resultadoDiv.innerHTML = "";
+
+        if (!query) {
+            loadData();
+            return;
+        }
+
+        const upperQuery = query.toUpperCase();
+        if (globalData[upperQuery]) {
+            document.getElementById('codeSelect').value = upperQuery;
+            loadData();
+            return;
+        }
+
+        let coincidencias = [];
+        const palabrasQuery = query.split(" ");
+
+        Object.keys(globalData).forEach(codigo => {
+            const item = globalData[codigo];
+            const nombre = (item && !Array.isArray(item) && item.nombre ? item.nombre : "").toLowerCase();
+            
+            const match = palabrasQuery.every(palabra => nombre.includes(palabra) || codigo.toLowerCase().includes(palabra));
+            if (match) {
+                coincidencias.push({ codigo, nombre: item.nombre || "Sin nombre descriptivo" });
+            }
+        });
+
+        if (coincidencias.length > 0) {
+            let html = `Coincidencias encontradas: `;
+            coincidencias.forEach(c => {
+                html += `<a href="#" onclick="seleccionarDesdeBusqueda('${c.codigo}')" style="margin-right: 10px; font-weight:bold; color:#2563eb; text-decoration:underline;">[${c.codigo}: ${c.nombre}]</a>`;
+            });
+            resultadoDiv.innerHTML = html;
+            
+            if (coincidencias.length === 1) {
+                document.getElementById('codeSelect').value = coincidencias[0].codigo;
+                loadData();
+            }
+        } else {
+            resultadoDiv.innerHTML = `<span style="color:#dc2626;">No se encontraron cables con ese nombre o código.</span>`;
+            loadData();
+        }
+    }
+
+    function seleccionarDesdeBusqueda(codigo) {
+        document.getElementById('searchInput').value = codigo;
+        document.getElementById('codeSelect').value = codigo;
+        document.getElementById('resultadoBusquedaNombre').innerHTML = `Seleccionado: <b>${codigo}</b>`;
+        loadData();
+    }
+
+    function selectCode(value) {
+        if(value) {
+            document.getElementById('searchInput').value = value;
+            document.getElementById('resultadoBusquedaNombre').innerHTML = "";
+            loadData();
+        }
+    }
+
+    function toggleAuth() {
+        const pass = document.getElementById('passInput').value;
+        if (!isAdmin) {
+            if (pass === "admin123") {
+                isAdmin = true;
+                document.getElementById('roleBadge').textContent = "Modo Edición";
+                document.getElementById('roleBadge').className = "badge badge-admin";
+                document.getElementById('authBtn').textContent = "Salir";
+                document.getElementById('passInput').style.display = "none";
+            } else {
+                alert("Contraseña incorrecta");
+            }
+        } else {
+            isAdmin = false;
+            document.getElementById('roleBadge').textContent = "Modo Lectura";
+            document.getElementById('roleBadge').className = "badge badge-read";
+            document.getElementById('authBtn').textContent = "Entrar";
+            document.getElementById('passInput').style.display = "inline-block";
+            document.getElementById('passInput').value = "";
+        }
+        loadData();
+    }
+
+    function loadData() {
+        const rawCode = document.getElementById('searchInput').value.trim().toUpperCase();
+        const tbody = document.getElementById('tableBody');
+        const applyIva = document.getElementById('ivaToggle').checked;
+        const metros = parseFloat(document.getElementById('metrosInput').value) || 0;
+
+        document.querySelectorAll('.admin-only').forEach(el => {
+            el.style.display = isAdmin ? '' : 'none';
+        });
+
+        if (!rawCode || !globalData[rawCode]) {
+            tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; color: #64748b; padding: 30px;">Selecciona un cable en el buscador superior</td></tr>`;
+            document.getElementById('printTitle').textContent = "Ningún cable seleccionado";
+            document.getElementById('cableNombreDesc').textContent = "";
+            if (chartInstance) chartInstance.destroy();
+            return;
+        }
+
+        const dataItem = globalData[rawCode];
+        const nombreCable = (dataItem && !Array.isArray(dataItem) && dataItem.nombre) ? dataItem.nombre : "Cable sin nombre descriptivo";
+        const rows = Array.isArray(dataItem) ? dataItem : (dataItem.precios || []);
+
+        document.getElementById('printTitle').textContent = `Cotización: ${rawCode}`;
+        document.getElementById('cableNombreDesc').textContent = nombreCable; // <-- Error corregido aquí
+
+        const thTotal = document.getElementById('thTotal');
+        if (metros > 0) {
+            thTotal.style.display = '';
+            thTotal.textContent = `Total (${metros}m)`;
+        } else {
+            thTotal.style.display = 'none';
+        }
+
+        tbody.innerHTML = "";
+
+        if (rows.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; color: #64748b; padding: 30px;">No hay precios registrados para este cable. Añade uno abajo.</td></tr>`;
+            if (chartInstance) chartInstance.destroy();
+            return;
+        }
+
+        const minPrice = Math.min(...rows.map(r => Number(r.price)));
+
+        rows.forEach((row) => {
+            const tr = document.createElement('tr');
+            const isCheapest = Number(row.price) === minPrice;
+            if (isCheapest) tr.classList.add('cheapest');
+
+            let priceFinal = Number(row.price);
+            if (applyIva) priceFinal = priceFinal * 1.15; // IVA 15% Ecuador
+
+            let totalCol = '';
+            if (metros > 0) {
+                totalCol = `<td><strong>$${(priceFinal * metros).toFixed(2)}</strong></td>`;
+            }
+
+            if (isAdmin) {
+                tr.innerHTML = `
+                    <td><input type="text" list="lista-proveedores" value="${row.provider}" onchange="updateCell('${rawCode}', ${row.id}, 'provider', normalizar(this.value))"></td>
+                    <td>
+                        <select onchange="updateCell('${rawCode}', ${row.id}, 'type', this.value)">
+                            <option value="Distribuidor" ${row.type === 'Distribuidor' ? 'selected' : ''}>Distribuidor</option>
+                            <option value="Fabricante" ${row.type === 'Fabricante' ? 'selected' : ''}>Fabricante</option>
+                        </select>
+                    </td>
+                    <td><input type="text" list="lista-marcas" value="${row.brand}" onchange="updateCell('${rawCode}', ${row.id}, 'brand', normalizar(this.value))"></td>
+                    <td><input type="number" step="0.0001" value="${row.price}" onchange="updateCell('${rawCode}', ${row.id}, 'price', parseFloat(this.value))"></td>
+                    ${totalCol}
+                    <td><input type="date" value="${row.date}" onchange="updateCell('${rawCode}', ${row.id}, 'date', this.value)"></td>
+                    <td class="admin-only"><button class="danger" onclick="deleteRow('${rawCode}', ${row.id})" style="padding: 6px 10px;">X</button></td>
+                `;
+            } else {
+                tr.innerHTML = `
+                    <td>${row.provider}</td>
+                    <td>${row.type}</td>
+                    <td>${row.brand}</td>
+                    <td>$${priceFinal.toFixed(4)} ${isCheapest ? '⭐ (Más barato)' : ''}</td>
+                    ${totalCol}
+                    <td>${row.date}</td>
+                `;
+            }
+            tbody.appendChild(tr);
+        });
+
+        renderChart(rows, applyIva);
+    }
+
+    function abrirModalCrearCable() {
+        document.getElementById('modalCodigo').value = "";
+        document.getElementById('modalNombre').value = "";
+        document.getElementById('modalProveedor').value = "";
+        document.getElementById('modalMarca').value = "";
+        document.getElementById('modalPrecio').value = "";
+        document.getElementById('modalCrearCable').style.display = 'flex';
+    }
+
+    function abrirModalEditarNombre() {
+        const code = document.getElementById('searchInput').value.trim().toUpperCase();
+        if (!code || !globalData[code]) return;
+        const item = globalData[code];
+        const nombreActual = (item && !Array.isArray(item) && item.nombre) ? item.nombre : "";
+        
+        const nuevoNombre = prompt(`Editar nombre descriptivo para [${code}]:`, nombreActual);
+        if (nuevoNombre !== null) {
+            if (Array.isArray(globalData[code])) {
+                globalData[code] = { nombre: nuevoNombre.trim(), precios: globalData[code] };
+            } else {
+                globalData[code].nombre = nuevoNombre.trim();
+            }
+            saveToCloud();
+            updateSelects();
+            loadData();
+        }
+    }
+
+    function cerrarModal(id) {
+        document.getElementById(id).style.display = 'none';
+    }
+
+    function guardarNuevoCableModal() {
+        const codigo = document.getElementById('modalCodigo').value.trim().toUpperCase();
+        const nombre = document.getElementById('modalNombre').value.trim();
+        const proveedor = normalizar(document.getElementById('modalProveedor').value);
+        const marca = normalizar(document.getElementById('modalMarca').value);
+        const precio = parseFloat(document.getElementById('modalPrecio').value);
+
+        if (!codigo) return alert("El código del cable es obligatorio.");
+        if (!proveedor || !marca || isNaN(precio)) return alert("Completa proveedor, marca y un precio válido.");
+
+        if (!globalData[codigo]) {
+            globalData[codigo] = { nombre: nombre || "Cable sin nombre", precios: [] };
+        } else if (Array.isArray(globalData[codigo])) {
+            globalData[codigo] = { nombre: nombre || "Cable sin nombre", precios: globalData[codigo] };
+        }
+
+        globalData[codigo].precios.push({
+            id: Date.now(),
+            provider: proveedor,
+            type: "Distribuidor",
+            brand: marca,
+            price: precio,
+            date: new Date().toISOString().split('T')[0]
+        });
+
+        saveToCloud();
+        updateSelects();
+        updateDatalists();
+        cerrarModal('modalCrearCable');
+
+        document.getElementById('searchInput').value = codigo;
+        document.getElementById('codeSelect').value = codigo;
+        loadData();
+    }
+
+    function addRow() {
+        const code = document.getElementById('searchInput').value.trim().toUpperCase();
+        if (!code) return alert("Selecciona un cable primero.");
+
+        if (Array.isArray(globalData[code])) {
+            globalData[code] = { nombre: "Cable sin nombre", precios: globalData[code] };
+        }
+
+        globalData[code].precios.push({
+            id: Date.now(),
+            provider: "NUEVO PROVEEDOR",
+            type: "Distribuidor",
+            brand: "MARCA",
+            price: 1.00,
+            date: new Date().toISOString().split('T')[0]
+        });
+
+        saveToCloud();
+        loadData();
+    }
+
+    function updateCell(code, id, field, value) {
+        const item = globalData[code];
+        const rows = Array.isArray(item) ? item : item.precios;
+        const row = rows.find(r => r.id === id);
+        if (row) {
+            row[field] = value;
+            saveToCloud();
+        }
+    }
+
+    function deleteRow(code, id) {
+        if (!confirm("¿Eliminar este precio?")) return;
+        const item = globalData[code];
+        if (Array.isArray(item)) {
+            globalData[code] = item.filter(r => r.id !== id);
+        } else {
+            item.precios = item.precios.filter(r => r.id !== id);
+        }
+        saveToCloud();
+        loadData();
+    }
+
+    function exportToExcel() {
+        const code = document.getElementById('searchInput').value.trim().toUpperCase();
+        if (!code || !globalData[code]) return alert("Selecciona un cable con datos primero.");
+        
+        const item = globalData[code];
+        const rows = Array.isArray(item) ? item : item.precios;
+
+        let ws_data = [["Proveedor", "Tipo", "Marca", "Precio Unitario", "Fecha"]];
+        rows.forEach(r => ws_data.push([r.provider, r.type, r.brand, r.price, r.date]));
+        
+        const wb = XLSX.utils.book_new();
+        const ws = XLSX.utils.aoa_to_sheet(ws_data);
+        XLSX.utils.book_append_sheet(wb, ws, "Cotización");
+        XLSX.writeFile(wb, `Cotizacion_${code}.xlsx`);
+    }
+
+    // Importar JSON a la Nube de forma segura (Fusionando sin borrar lo existente)
+    function importToCloud(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            try {
+                const parsed = JSON.parse(e.target.result);
+                
+                // Fusionar inteligentemente en lugar de sobreescribir todo
+                Object.keys(parsed).forEach(codigo => {
+                    globalData[codigo] = parsed[codigo];
+                });
+
+                saveToCloud();
+                updateSelects();
+                updateDatalists();
+                loadData();
+                alert("¡Datos importados y fusionados con éxito en la nube!");
+            } catch (err) { 
+                alert("Archivo JSON inválido o corrupto."); 
+            }
+        };
+        reader.readAsText(file);
+    }
+
+    function renderChart(data, isIva) {
+        const ctx = document.getElementById('priceChart').getContext('2d');
+        if (chartInstance) chartInstance.destroy();
+        if (data.length === 0) return;
+
+        const sortedData = [...data].sort((a, b) => new Date(a.date) - new Date(b.date));
+        const factor = isIva ? 1.15 : 1;
+
+        chartInstance = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: sortedData.map(d => `${d.provider} (${d.brand})`),
+                datasets: [{
+                    label: `Precio Unitario ${isIva ? 'CON IVA' : 'SIN IVA'} (USD)`,
+                    data: sortedData.map(d => (d.price * factor).toFixed(4)),
+                    backgroundColor: sortedData.map(d => 
+                        d.price === Math.min(...data.map(r=>r.price)) ? '#16a34a' : '#2563eb'
+                    ),
+                    borderRadius: 6
+                }]
+            },
+            options: { responsive: true, plugins: { title: { display: true, text: 'Comparativa de Precios' } } }
+        });
+    }
+</script>
+</body>
+</html>
