@@ -216,10 +216,21 @@
             
             <label>Nombre Descriptivo</label>
             <input type="text" id="modalNombre" placeholder="Ej: Cable Concéntrico...">
+
+            <hr style="border: 0; border-top: 1px solid var(--border); margin: 5px 0;">
+            
+            <label>Proveedor Inicial</label>
+            <input type="text" id="modalProveedor" list="lista-proveedores" placeholder="Ej: ECUACABLE">
+            
+            <label>Marca</label>
+            <input type="text" id="modalMarca" list="lista-marcas" placeholder="Ej: ECUACABLE">
+            
+            <label>Precio Unitario (USD)</label>
+            <input type="number" id="modalPrecio" step="0.0001" placeholder="0.00">
         </div>
         <div class="modal-footer">
             <button onclick="document.getElementById('modalCrearCable').style.display='none'" style="background: #cbd5e1; color: #334155;">Cancelar</button>
-            <button onclick="guardarCableModal()" class="success">Guardar Inicial</button>
+            <button onclick="guardarCableModal()" class="success">Guardar Cable</button>
         </div>
     </div>
 </div>
@@ -560,17 +571,41 @@
     function guardarCableModal() {
         const code = document.getElementById('modalCodigo').value.trim().toUpperCase();
         const nombre = document.getElementById('modalNombre').value.trim();
-        if (!code) return alert("Código obligatorio");
-        if (globalData[code]) return alert("Ese código ya existe");
+        const proveedor = document.getElementById('modalProveedor').value.trim().toUpperCase();
+        const marca = document.getElementById('modalMarca').value.trim().toUpperCase();
+        const precio = parseFloat(document.getElementById('modalPrecio').value);
 
+        if (!code) return alert("El código del cable es obligatorio.");
+        if (globalData[code]) return alert("Ese código ya existe en la base de datos.");
+
+        // 1. Crear la estructura base del cable
         globalData[code] = { nombre: nombre, precios: [], historial: [] };
+
+        // 2. Si el usuario llenó los datos del proveedor, lo agregamos de una vez
+        if (proveedor && !isNaN(precio)) {
+            globalData[code].precios.push({
+                id: Date.now(),
+                provider: proveedor,
+                type: "Distribuidor", // Por defecto, se puede cambiar en la tabla
+                brand: marca || proveedor, // Si no pone marca, asume que es la misma del proveedor
+                price: precio,
+                date: new Date().toISOString().split('T')[0]
+            });
+        }
+
+        // 3. Guardar en la nube y cerrar modal
         saveToCloud();
         document.getElementById('modalCrearCable').style.display = 'none';
         
-        // Limpiar y seleccionar
+        // 4. Limpiar los campos para la próxima vez que se abra
         document.getElementById('modalCodigo').value = "";
         document.getElementById('modalNombre').value = "";
-        selectCable(code);
+        document.getElementById('modalProveedor').value = "";
+        document.getElementById('modalMarca').value = "";
+        document.getElementById('modalPrecio').value = "";
+
+        updateDatalists();
+        selectCable(code); // Seleccionar automáticamente el cable recién creado
     }
 
     function editarCodigoActual() {
