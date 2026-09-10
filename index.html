@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Cotizador Pro - Abastecimiento de Cables</title>
+    <title>Cotizador de Abastecimiento v1.6</title>
 
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
@@ -102,7 +102,7 @@
 <div class="container">
     <header>
         <div>
-            <h2 style="margin: 0; color: var(--primary);">⚡ Cotizador Pro</h2>
+            <h2 style="margin: 0; color: var(--primary);">⚡ Cotizador de Abastecimiento <span style="font-size:12px; font-weight:600; color:#94a3b8;">v1.6</span></h2>
             <span id="syncStatus" style="font-size: 12px; font-weight: bold; color: #d97706;">🔄 Conectando...</span>
         </div>
         <div style="display: flex; gap: 10px; align-items: center;">
@@ -246,6 +246,10 @@
                     <label>Proveedor Externo</label>
                     <input type="text" id="extProveedorNombre" list="lista-proveedores" placeholder="Ej: NUEVOCABLE">
                 </div>
+                <div class="search-group" style="max-width:140px;">
+                    <label>Cant. Metros</label>
+                    <input type="number" id="extMetrosInput" placeholder="Opcional" oninput="renderCotizacionExterna()">
+                </div>
                 <button class="success" onclick="agregarItemCotizacionExterna()">+ Agregar a la lista</button>
             </div>
             <div id="extSelectedInfo" style="margin-top:8px; font-size:13px; color:#64748b;">Ningún cable seleccionado todavía.</div>
@@ -266,13 +270,15 @@
                         <th>Nombre</th>
                         <th>Proveedor Externo</th>
                         <th>Precio Ofrecido</th>
-                        <th>Mejor Precio Actual (Base)</th>
-                        <th>Diferencia</th>
+                        <th>Mejor Precio (Histórico)</th>
+                        <th>Último Precio (Reciente)</th>
+                        <th>Diferencia vs. Mejor</th>
+                        <th class="extThTotales" style="display:none;">Totales (por Metros)</th>
                         <th>Acciones</th>
                     </tr>
                 </thead>
                 <tbody id="extTableBody">
-                    <tr><td colspan="7" style="text-align:center; padding:25px;">Agrega cables arriba para armar la lista de cotización.</td></tr>
+                    <tr><td colspan="9" style="text-align:center; padding:25px;">Agrega cables arriba para armar la lista de cotización.</td></tr>
                 </tbody>
             </table>
         </div>
@@ -383,7 +389,7 @@
 
 <script>
     /* ============================================================
-       COTIZADOR PRO — VERSIÓN MAESTRA (unifica las 3 iteraciones)
+       COTIZADOR DE ABASTECIMIENTO v1.6 — VERSIÓN MAESTRA
        ------------------------------------------------------------
        IMPORTANTE PARA FUTURAS EDICIONES CON IA:
        Este es el ÚNICO archivo fuente. Si vas a pedirle a una IA
@@ -887,6 +893,35 @@
     let extSelectedCode = "";
     let cotizacionExterna = []; // { code, nombre, proveedor, precioOfrecido }
 
+    /* --------------------------------------------------------------
+       Calcula, para un cable dado, el MEJOR precio (el más bajo,
+       mirando tanto precios activos como el historial archivado) y
+       el ÚLTIMO precio (el de fecha más reciente), cada uno con su
+       fecha, proveedor y marca para dar contexto en un tooltip.
+       Si un precio no tiene fecha, se lo considera igualmente para
+       "mejor" pero no compite por "más reciente".
+    -------------------------------------------------------------- */
+    function getMejorYUltimoPrecio(code) {
+        const item = globalData[code];
+        if (!item) return { mejor: null, ultimo: null };
+
+        const activos = Array.isArray(item) ? item : (item.precios || []);
+        const historial = (!Array.isArray(item) && item.historial) ? item.historial : [];
+        const todos = [...activos, ...historial];
+
+        if (todos.length === 0) return { mejor: null, ultimo: null };
+
+        let mejor = todos.reduce((min, p) => (p.price < min.price ? p : min), todos[0]);
+
+        const conFecha = todos.filter(p => p.date);
+        let ultimo = null;
+        if (conFecha.length > 0) {
+            ultimo = conFecha.reduce((max, p) => (new Date(p.date) > new Date(max.date) ? p : max), conFecha[0]);
+        }
+
+        return { mejor, ultimo };
+    }
+
     function handleExtSearchCode(q) { extSearchGeneric(q, 'extAutocompleteCodeMenu', 'extSearchCodeInput', true); }
     function handleExtSearchName(q) { extSearchGeneric(q, 'extAutocompleteNameMenu', 'extSearchNameInput', false); }
 
@@ -963,29 +998,60 @@
         const tbody = document.getElementById('extTableBody');
         tbody.innerHTML = "";
 
+        const metros = parseFloat(document.getElementById('extMetrosInput').value) || 0;
+        document.querySelectorAll('.extThTotales').forEach(th => th.style.display = metros > 0 ? 'table-cell' : 'none');
+
         if (cotizacionExterna.length === 0) {
-            tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; padding:25px;">Agrega cables arriba para armar la lista de cotización.</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="9" style="text-align:center; padding:25px;">Agrega cables arriba para armar la lista de cotización.</td></tr>`;
             return;
         }
 
         cotizacionExterna.forEach((entry, index) => {
-            const item = globalData[entry.code];
-            const rows = item ? (Array.isArray(item) ? item : (item.precios || [])) : [];
-            let mejorPrecioActual = rows.length > 0 ? Math.min(...rows.map(r => r.price)) : null;
+            const { mejor, ultimo } = getMejorYUltimoPrecio(entry.code);
 
-            let diffHtml = '<span style="color:#64748b;">Sin datos actuales</span>';
+            // --- Celda "Mejor Precio (Histórico)" con tooltip de proveedor/marca ---
+            let mejorHtml = '<span style="color:#64748b;">Sin datos</span>';
+            if (mejor) {
+                const tooltipMejor = `Proveedor: ${mejor.provider || 'N/D'} | Marca: ${mejor.brand || 'N/D'}`;
+                mejorHtml = `<span title="${tooltipMejor}"><strong>$${mejor.price.toFixed(4)}</strong><br><small style="color:#64748b;">${mejor.date || 'Sin fecha'}</small></span>`;
+            }
+
+            // --- Celda "Último Precio (Reciente)" con tooltip de proveedor/marca ---
+            let ultimoHtml = '<span style="color:#64748b;">Sin datos</span>';
+            if (ultimo) {
+                const tooltipUltimo = `Proveedor: ${ultimo.provider || 'N/D'} | Marca: ${ultimo.brand || 'N/D'}`;
+                ultimoHtml = `<span title="${tooltipUltimo}"><strong>$${ultimo.price.toFixed(4)}</strong><br><small style="color:#64748b;">${ultimo.date || 'Sin fecha'}</small></span>`;
+            }
+
+            // --- Diferencia vs. Mejor precio histórico ---
+            let diffHtml = '<span style="color:#64748b;">Sin datos</span>';
             let rowClass = '';
-            if (mejorPrecioActual !== null) {
-                const diff = entry.precioOfrecido - mejorPrecioActual;
-                const pct = (diff / mejorPrecioActual) * 100;
+            if (mejor) {
+                const diff = entry.precioOfrecido - mejor.price;
+                const pct = (diff / mejor.price) * 100;
                 if (diff < 0) {
                     diffHtml = `<strong style="color:#166534;">-$${Math.abs(diff).toFixed(4)} (${pct.toFixed(1)}%) más barato</strong>`;
                     rowClass = 'cheapest';
                 } else if (diff > 0) {
                     diffHtml = `<strong style="color:#991b1b;">+$${diff.toFixed(4)} (${pct.toFixed(1)}%) más caro</strong>`;
                 } else {
-                    diffHtml = `<span>Igual al precio actual</span>`;
+                    diffHtml = `<span>Igual al mejor precio</span>`;
                 }
+            }
+
+            // --- Totales por metros (columna opcional) ---
+            let totalesCol = '';
+            if (metros > 0) {
+                const totalOfrecido = entry.precioOfrecido * metros;
+                const totalMejor = mejor ? mejor.price * metros : null;
+                const totalUltimo = ultimo ? ultimo.price * metros : null;
+                totalesCol = `<td>
+                    <div>Ofrecido: <strong>$${totalOfrecido.toFixed(2)}</strong></div>
+                    <div style="color:#64748b; font-size:11px;">Mejor: ${totalMejor !== null ? '$' + totalMejor.toFixed(2) : 'N/A'}</div>
+                    <div style="color:#64748b; font-size:11px;">Último: ${totalUltimo !== null ? '$' + totalUltimo.toFixed(2) : 'N/A'}</div>
+                </td>`;
+            } else {
+                totalesCol = `<td class="extThTotales" style="display:none;"></td>`;
             }
 
             const tr = document.createElement('tr');
@@ -995,8 +1061,10 @@
                 <td>${entry.nombre}</td>
                 <td>${entry.proveedor}</td>
                 <td>$${entry.precioOfrecido.toFixed(4)}</td>
-                <td>${mejorPrecioActual !== null ? '$' + mejorPrecioActual.toFixed(4) : 'N/A'}</td>
+                <td>${mejorHtml}</td>
+                <td>${ultimoHtml}</td>
                 <td>${diffHtml}</td>
+                ${totalesCol}
                 <td><button class="danger action-btn" onclick="quitarItemCotizacionExterna(${index})">✖ Quitar</button></td>
             `;
             tbody.appendChild(tr);
