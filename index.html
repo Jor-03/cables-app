@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Cotizador - Abastecimiento de Cables</title>
+    <title>Cotizador Pro - Abastecimiento de Cables</title>
 
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
@@ -102,19 +102,22 @@
 <div class="container">
     <header>
         <div>
-            <h2 style="margin: 0; color: var(--primary);">⚡ Cotizador de Abastecimineto v1.5</h2>
+            <h2 style="margin: 0; color: var(--primary);">⚡ Cotizador Pro</h2>
             <span id="syncStatus" style="font-size: 12px; font-weight: bold; color: #d97706;">🔄 Conectando...</span>
         </div>
         <div style="display: flex; gap: 10px; align-items: center;">
-            <input type="password" id="passInput" placeholder="Clave admin" style="width: 100px;">
-            <button onclick="toggleAuth()" id="authBtn">Entrar</button>
+            <div class="switch-container">
+                <span id="modeLabel" style="color:#64748b;">Modo Lectura</span>
+                <label class="switch"><input type="checkbox" id="adminToggle" onchange="toggleAuth()"><span class="slider"></span></label>
+            </div>
         </div>
     </header>
 
     <div class="tabs no-print">
         <button class="tab-btn active" onclick="openTab('tabCotizador', this)">🛒 1. Consultar y Comparar</button>
         <button class="tab-btn" onclick="openTab('tabGraficos', this)">📈 2. Historial de Precios</button>
-        <button class="tab-btn" onclick="openTab('tabAdmin', this)">⚙️ 3. Administración</button>
+        <button class="tab-btn" onclick="openTab('tabCotizacionExterna', this)">📋 3. Cotización Externa</button>
+        <button class="tab-btn" onclick="openTab('tabAdmin', this)">⚙️ 4. Administración</button>
     </div>
 
     <!-- PESTAÑA 1: COTIZADOR -->
@@ -216,7 +219,66 @@
         </div>
     </div>
 
-    <!-- PESTAÑA 3: ADMINISTRACIÓN -->
+    <!-- PESTAÑA 3: COTIZACIÓN EXTERNA (comparación múltiple) -->
+    <div id="tabCotizacionExterna" class="tab-content">
+        <div class="panel-card">
+            <h3 style="margin-top:0;">Ingresar Propuesta de Proveedor Externo</h3>
+            <span style="font-size: 13px; color: #64748b;">Busca cada cable de la lista que te está cotizando el proveedor, ingresa el precio ofrecido y agrégalo a la tabla de abajo. Al final podrás comparar contra la base oficial y guardar solo lo que decidas aceptar.</span>
+
+            <div style="display:flex; flex-wrap:wrap; gap:15px; margin-top:15px; align-items:flex-end;">
+                <div class="search-container" style="max-width:600px;">
+                    <div class="search-group">
+                        <label>🔎 Buscar CÓDIGO:</label>
+                        <input type="text" id="extSearchCodeInput" placeholder="Ej: F12..." oninput="handleExtSearchCode(this.value)" autocomplete="off">
+                        <div id="extAutocompleteCodeMenu" class="custom-autocomplete"></div>
+                    </div>
+                    <div class="search-group">
+                        <label>🔎 Buscar NOMBRE:</label>
+                        <input type="text" id="extSearchNameInput" placeholder="Ej: Gemelo..." oninput="handleExtSearchName(this.value)" autocomplete="off">
+                        <div id="extAutocompleteNameMenu" class="custom-autocomplete"></div>
+                    </div>
+                </div>
+                <div class="search-group" style="max-width:160px;">
+                    <label>Nuevo Precio ($)</label>
+                    <input type="number" id="extNuevoPrecio" step="0.0001" placeholder="0.0000">
+                </div>
+                <div class="search-group" style="max-width:180px;">
+                    <label>Proveedor Externo</label>
+                    <input type="text" id="extProveedorNombre" list="lista-proveedores" placeholder="Ej: NUEVOCABLE">
+                </div>
+                <button class="success" onclick="agregarItemCotizacionExterna()">+ Agregar a la lista</button>
+            </div>
+            <div id="extSelectedInfo" style="margin-top:8px; font-size:13px; color:#64748b;">Ningún cable seleccionado todavía.</div>
+        </div>
+
+        <div class="table-responsive">
+            <div style="padding: 12px 15px; border-bottom: 1px solid var(--border); display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+                <h3 style="margin:0;">Comparación: Propuesta vs. Base Oficial</h3>
+                <div style="display:flex; gap:10px;">
+                    <button class="danger" onclick="limpiarCotizacionExterna()">🗑️ Limpiar Lista</button>
+                    <button class="success admin-only" onclick="aceptarCotizacionExterna()">✅ Guardar/Aceptar Cotización</button>
+                </div>
+            </div>
+            <table id="extTableComparacion">
+                <thead>
+                    <tr>
+                        <th>Código</th>
+                        <th>Nombre</th>
+                        <th>Proveedor Externo</th>
+                        <th>Precio Ofrecido</th>
+                        <th>Mejor Precio Actual (Base)</th>
+                        <th>Diferencia</th>
+                        <th>Acciones</th>
+                    </tr>
+                </thead>
+                <tbody id="extTableBody">
+                    <tr><td colspan="7" style="text-align:center; padding:25px;">Agrega cables arriba para armar la lista de cotización.</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- PESTAÑA 4: ADMINISTRACIÓN -->
     <div id="tabAdmin" class="tab-content">
         <div class="panel-card" style="text-align: center; max-width: 600px; margin: 0 auto; display: flex; flex-direction: column; gap: 15px;">
             <h3 style="margin: 0;">Herramientas del Sistema</h3>
@@ -248,6 +310,19 @@
                     <span style="font-size: 12px; color: #64748b;">Limpia puntos duplicados del historial guardados por error.</span>
                 </div>
                 <button style="background: #9333ea;" onclick="limpiarHistorialBasura()">🧹 Limpiar Historial</button>
+            </div>
+
+            <div class="admin-only" style="flex-direction: column; gap: 10px; align-items: stretch; border-bottom: 1px solid var(--border); padding-bottom: 15px;">
+                <div style="text-align: left;">
+                    <strong style="display: block; font-size: 14px; color: var(--danger);">Eliminar un Cable</strong>
+                    <span style="font-size: 12px; color: #64748b;">Borra la ficha completa (todos sus proveedores e historial) de la base de datos.</span>
+                </div>
+                <div style="display: flex; gap: 10px; align-items: center; position: relative;">
+                    <input type="text" id="searchDeleteInput" placeholder="Buscar código o nombre..." oninput="handleSearchDelete(this.value)" autocomplete="off" style="flex:1;">
+                    <button class="danger" onclick="borrarCableSeleccionado()">🗑️ Eliminar Cable</button>
+                    <div id="autocompleteDeleteMenu" class="custom-autocomplete" style="top: 100%;"></div>
+                </div>
+                <span id="deleteTargetLabel" style="font-size: 12px; color: #64748b; text-align: left;">Ningún cable seleccionado.</span>
             </div>
 
             <p class="solo-lectura-msg" style="color: #dc2626; font-size: 13px;">Inicia sesión con la clave admin para ver las herramientas avanzadas.</p>
@@ -359,9 +434,20 @@
        personas editando a la vez se pisen los cambios entre sí, y
        gasta menos cuota de Firebase.
     -------------------------------------------------------------- */
-    function saveCable(code) {
+    function saveCable(code, statusElementId) {
         if (!globalData[code]) return;
-        db.ref('cables/' + code).set(globalData[code]);
+        const statusEl = document.getElementById(statusElementId);
+        if(statusEl) {
+            statusEl.innerText = "⏳ Guardando...";
+            statusEl.style.color = "#d97706";
+        }
+        db.ref('cables/' + code).set(globalData[code]).then(() => {
+            if(statusEl) {
+                statusEl.innerText = "✅ Guardado";
+                statusEl.style.color = "#16a34a";
+                setTimeout(() => { statusEl.innerText = ""; }, 2500);
+            }
+        });
     }
     function saveFullDb() {
         // Solo se usa para operaciones masivas: importar JSON, limpiar
@@ -378,18 +464,9 @@
     }
 
     function toggleAuth() {
-        if (!isAdmin && document.getElementById('passInput').value === "admin123") {
-            isAdmin = true;
-            document.getElementById('authBtn').textContent = "Salir";
-            document.getElementById('passInput').style.display = "none";
-        } else if (isAdmin) {
-            isAdmin = false;
-            document.getElementById('authBtn').textContent = "Entrar";
-            document.getElementById('passInput').style.display = "inline-block";
-            document.getElementById('passInput').value = "";
-        } else {
-            alert("Clave incorrecta"); return;
-        }
+        isAdmin = document.getElementById('adminToggle').checked;
+        document.getElementById('modeLabel').innerText = isAdmin ? "Modo Edición" : "Modo Lectura";
+        document.getElementById('modeLabel').style.color = isAdmin ? "var(--primary)" : "#64748b";
         document.querySelectorAll('.admin-only').forEach(el => el.style.display = isAdmin ? 'flex' : 'none');
         document.querySelectorAll('.solo-lectura-msg').forEach(el => el.style.display = isAdmin ? 'none' : 'block');
         renderAllTables();
@@ -509,17 +586,22 @@
                 else if (diffDays >= 21) badgeClass = "date-orange";
             }
 
+            const statusId = 'status-main-' + row.id;
+
             if (isAdmin) {
                 tr.innerHTML = `
-                    <td><input type="text" list="lista-proveedores" value="${row.provider}" onchange="updateCell('${code}', ${row.id}, 'provider', this.value.toUpperCase())" style="width:85px;"></td>
-                    <td><select onchange="updateCell('${code}', ${row.id}, 'type', this.value)"><option ${row.type === 'Distribuidor' ? 'selected' : ''}>Distribuidor</option><option ${row.type === 'Fabricante' ? 'selected' : ''}>Fabricante</option></select></td>
-                    <td><input type="text" list="lista-marcas" value="${row.brand}" onchange="updateCell('${code}', ${row.id}, 'brand', this.value.toUpperCase())" style="width:80px;"></td>
-                    <td><input type="number" step="0.0001" value="${row.price}" onchange="updateCell('${code}', ${row.id}, 'price', parseFloat(this.value))" style="width:70px;"></td>
+                    <td><input type="text" list="lista-proveedores" value="${row.provider}" onchange="updateCell('${code}', ${row.id}, 'provider', this.value.toUpperCase(), '${statusId}')" style="width:85px;"></td>
+                    <td><select onchange="updateCell('${code}', ${row.id}, 'type', this.value, '${statusId}')"><option ${row.type === 'Distribuidor' ? 'selected' : ''}>Distribuidor</option><option ${row.type === 'Fabricante' ? 'selected' : ''}>Fabricante</option></select></td>
+                    <td><input type="text" list="lista-marcas" value="${row.brand}" onchange="updateCell('${code}', ${row.id}, 'brand', this.value.toUpperCase(), '${statusId}')" style="width:80px;"></td>
+                    <td><input type="number" step="0.0001" value="${row.price}" onchange="updateCell('${code}', ${row.id}, 'price', parseFloat(this.value), '${statusId}')" style="width:70px;"></td>
                     ${totalCol}
-                    <td><input type="date" value="${row.date || ''}" onchange="updateCell('${code}', ${row.id}, 'date', this.value)" style="width:105px;"></td>
-                    <td style="display:flex; gap:5px; flex-direction:column;">
-                        <button class="action-btn" onclick="renovarHistorial('${code}', ${row.id})" title="Archivar precio actual e iniciar uno nuevo con fecha de hoy">🔄 Renovar</button>
-                        <button class="danger action-btn" onclick="deleteRow('${code}', ${row.id})">✖ Borrar</button>
+                    <td><input type="date" value="${row.date || ''}" onchange="updateCell('${code}', ${row.id}, 'date', this.value, '${statusId}')" style="width:105px;"></td>
+                    <td>
+                        <div style="display:flex; gap:5px; flex-direction:column;">
+                            <button class="action-btn" onclick="renovarHistorial('${code}', ${row.id})" title="Archivar precio anterior">🔄 Renovar</button>
+                            <button class="danger action-btn" onclick="deleteRow('${code}', ${row.id})">✖ Borrar</button>
+                            <span id="${statusId}" style="font-size: 11px; font-weight: bold; margin-top: 2px;"></span>
+                        </div>
                     </td>
                 `;
             } else {
@@ -544,13 +626,13 @@
        botón "🔄 Renovar" archiva a propósito, cuando de verdad
        cambió el precio del proveedor en una fecha nueva.
     -------------------------------------------------------------- */
-    function updateCell(code, id, field, value) {
+    function updateCell(code, id, field, value, statusId) {
         const item = globalData[code];
         const rows = Array.isArray(item) ? item : item.precios;
         const row = rows.find(r => r.id === id);
         if (row) {
             row[field] = value;
-            saveCable(code);
+            saveCable(code, statusId);
             if (field === 'date' || field === 'price') renderAllTables();
         }
     }
@@ -562,7 +644,9 @@
         const row = rows.find(r => r.id === id);
 
         if (row) {
-            if(!confirm(`¿Archivar el precio actual de ${row.provider} ($${row.price}) en el historial y dejar la fila lista para el nuevo precio?`)) return;
+            const confirmar = confirm(`📄 PASO 1 DE 2:\nVas a archivar el precio actual de ${row.provider} ($${row.price}) hacia la gráfica histórica.\n\n¿Deseas guardarlo en la historia y dejar la celda lista para escribir el nuevo precio?`);
+            if(!confirmar) return;
+
             if(!item.historial) item.historial = [];
 
             let existing = item.historial.find(h => h.date === row.date && h.provider === row.provider);
@@ -574,13 +658,25 @@
 
             row.date = new Date().toISOString().split('T')[0];
             saveCable(code);
-            showToast("Archivado. Ahora puede ingresar el nuevo precio en la fila.");
+            
+            alert(`✅ ¡Precio archivado con éxito!\n\nPASO 2: Ahora puedes cambiar el número en la celda de precio por la nueva tarifa que te dieron hoy.`);
+            renderAllTables();
         }
     }
 
     function addProviderRow() {
         if (!currentCableCode) return;
-        const item = globalData[currentCableCode];
+        let item = globalData[currentCableCode];
+        // Si el cable no tiene estructura de precios válida (por ejemplo quedó
+        // sin proveedores, o el nodo llegó incompleto), la reconstruimos aquí
+        // en vez de fallar. Esto es lo que causaba el bloqueo del botón.
+        if (!item) {
+            item = { nombre: "", precios: [], historial: [] };
+            globalData[currentCableCode] = item;
+        }
+        if (!Array.isArray(item) && !Array.isArray(item.precios)) {
+            item.precios = [];
+        }
         const rows = Array.isArray(item) ? item : item.precios;
         rows.push({ id: Date.now(), provider: "NUEVO", type: "Distribuidor", brand: "NUEVA", price: 1.00, date: new Date().toISOString().split('T')[0] });
         saveCable(currentCableCode);
@@ -722,6 +818,240 @@
             } catch (err) { alert("Archivo JSON inválido."); }
         };
         reader.readAsText(file);
+    }
+
+    // --- ELIMINAR CABLE COMPLETO (Pestaña 3) ---
+    let deleteTargetCode = "";
+
+    function handleSearchDelete(query) {
+        const menu = document.getElementById('autocompleteDeleteMenu');
+        menu.innerHTML = "";
+        deleteTargetCode = "";
+        document.getElementById('deleteTargetLabel').innerText = "Ningún cable seleccionado.";
+        if (!query.trim()) { menu.style.display = 'none'; return; }
+
+        const qUpper = query.trim().toUpperCase();
+        const qLower = query.trim().toLowerCase();
+        let matches = [];
+        Object.keys(globalData).forEach(code => {
+            const nombre = (globalData[code].nombre || "");
+            if (code.includes(qUpper) || nombre.toLowerCase().includes(qLower)) {
+                matches.push({ code, nombre });
+            }
+        });
+
+        if (matches.length > 0) {
+            matches.slice(0, 10).forEach(match => {
+                const div = document.createElement('div');
+                div.className = 'autocomplete-item';
+                div.innerHTML = `<strong>${match.code}</strong> <span style="color:#64748b;">- ${match.nombre}</span>`;
+                div.onclick = () => {
+                    deleteTargetCode = match.code;
+                    document.getElementById('searchDeleteInput').value = `${match.code} - ${match.nombre}`;
+                    document.getElementById('deleteTargetLabel').innerText = `Seleccionado para eliminar: ${match.code}`;
+                    document.getElementById('deleteTargetLabel').style.color = "var(--danger)";
+                    menu.style.display = 'none';
+                };
+                menu.appendChild(div);
+            });
+            menu.style.display = 'block';
+        } else {
+            menu.style.display = 'none';
+        }
+    }
+
+    function borrarCableSeleccionado() {
+        if (!deleteTargetCode || !globalData[deleteTargetCode]) {
+            return alert("Primero busca y selecciona un cable de la lista para eliminarlo.");
+        }
+        const nombre = globalData[deleteTargetCode].nombre || "";
+        if (!confirm(`¿ELIMINAR PERMANENTEMENTE el cable "${deleteTargetCode}" (${nombre})?\n\nSe borrarán todos sus proveedores e historial. Esta acción no se puede deshacer.`)) return;
+
+        const codigoBorrado = deleteTargetCode;
+        db.ref('cables/' + codigoBorrado).remove().then(() => {
+            delete globalData[codigoBorrado];
+            if (currentCableCode === codigoBorrado) {
+                currentCableCode = "";
+                closeComparison();
+                renderAllTables();
+            }
+            document.getElementById('searchDeleteInput').value = "";
+            document.getElementById('deleteTargetLabel').innerText = "Ningún cable seleccionado.";
+            document.getElementById('deleteTargetLabel').style.color = "#64748b";
+            deleteTargetCode = "";
+            showToast(`Cable ${codigoBorrado} eliminado.`);
+        });
+    }
+
+    // --- MÓDULO DE COTIZACIÓN EXTERNA (comparación múltiple) ---
+    let extSelectedCode = "";
+    let cotizacionExterna = []; // { code, nombre, proveedor, precioOfrecido }
+
+    function handleExtSearchCode(q) { extSearchGeneric(q, 'extAutocompleteCodeMenu', 'extSearchCodeInput', true); }
+    function handleExtSearchName(q) { extSearchGeneric(q, 'extAutocompleteNameMenu', 'extSearchNameInput', false); }
+
+    function extSearchGeneric(query, menuId, inputId, isCode) {
+        const menu = document.getElementById(menuId);
+        menu.innerHTML = "";
+        if(isCode) document.getElementById('extSearchNameInput').value = ""; else document.getElementById('extSearchCodeInput').value = "";
+        if (!query.trim()) { menu.style.display = 'none'; return; }
+        const q = isCode ? query.trim().toUpperCase() : query.toLowerCase();
+        let matches = [];
+
+        Object.keys(globalData).forEach(code => {
+            const val = isCode ? code : (globalData[code].nombre || "").toLowerCase();
+            if (val.includes(q)) matches.push({ code, nombre: globalData[code].nombre });
+        });
+
+        if (matches.length > 0) {
+            matches.slice(0, 10).forEach(match => {
+                const div = document.createElement('div');
+                div.className = 'autocomplete-item';
+                div.innerHTML = `<strong>${match.code}</strong> <span style="color:#64748b;">- ${match.nombre}</span>`;
+                div.onclick = () => {
+                    extSelectedCode = match.code;
+                    document.getElementById(inputId).value = isCode ? match.code : match.nombre;
+                    document.getElementById('extSelectedInfo').innerText = `Seleccionado: ${match.code} - ${match.nombre || ''}`;
+                    menu.style.display = 'none';
+                };
+                menu.appendChild(div);
+            });
+            menu.style.display = 'block';
+        } else menu.style.display = 'none';
+    }
+
+    function agregarItemCotizacionExterna() {
+        if (!extSelectedCode || !globalData[extSelectedCode]) {
+            return alert("Primero busca y selecciona un cable de la base de datos.");
+        }
+        const precio = parseFloat(document.getElementById('extNuevoPrecio').value);
+        if (isNaN(precio) || precio <= 0) {
+            return alert("Ingresa un precio ofrecido válido.");
+        }
+        const proveedor = document.getElementById('extProveedorNombre').value.trim().toUpperCase() || "PROVEEDOR EXTERNO";
+
+        cotizacionExterna.push({
+            code: extSelectedCode,
+            nombre: globalData[extSelectedCode].nombre || "",
+            proveedor: proveedor,
+            precioOfrecido: precio
+        });
+
+        // Reset de los campos de captura para el siguiente ítem
+        document.getElementById('extSearchCodeInput').value = "";
+        document.getElementById('extSearchNameInput').value = "";
+        document.getElementById('extNuevoPrecio').value = "";
+        document.getElementById('extSelectedInfo').innerText = "Ningún cable seleccionado todavía.";
+        extSelectedCode = "";
+
+        renderCotizacionExterna();
+    }
+
+    function quitarItemCotizacionExterna(index) {
+        cotizacionExterna.splice(index, 1);
+        renderCotizacionExterna();
+    }
+
+    function limpiarCotizacionExterna() {
+        if (cotizacionExterna.length === 0) return;
+        if (!confirm("¿Vaciar toda la lista de cotización externa? (No afecta la base de datos oficial)")) return;
+        cotizacionExterna = [];
+        renderCotizacionExterna();
+    }
+
+    function renderCotizacionExterna() {
+        const tbody = document.getElementById('extTableBody');
+        tbody.innerHTML = "";
+
+        if (cotizacionExterna.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="7" style="text-align:center; padding:25px;">Agrega cables arriba para armar la lista de cotización.</td></tr>`;
+            return;
+        }
+
+        cotizacionExterna.forEach((entry, index) => {
+            const item = globalData[entry.code];
+            const rows = item ? (Array.isArray(item) ? item : (item.precios || [])) : [];
+            let mejorPrecioActual = rows.length > 0 ? Math.min(...rows.map(r => r.price)) : null;
+
+            let diffHtml = '<span style="color:#64748b;">Sin datos actuales</span>';
+            let rowClass = '';
+            if (mejorPrecioActual !== null) {
+                const diff = entry.precioOfrecido - mejorPrecioActual;
+                const pct = (diff / mejorPrecioActual) * 100;
+                if (diff < 0) {
+                    diffHtml = `<strong style="color:#166534;">-$${Math.abs(diff).toFixed(4)} (${pct.toFixed(1)}%) más barato</strong>`;
+                    rowClass = 'cheapest';
+                } else if (diff > 0) {
+                    diffHtml = `<strong style="color:#991b1b;">+$${diff.toFixed(4)} (${pct.toFixed(1)}%) más caro</strong>`;
+                } else {
+                    diffHtml = `<span>Igual al precio actual</span>`;
+                }
+            }
+
+            const tr = document.createElement('tr');
+            if (rowClass) tr.classList.add(rowClass);
+            tr.innerHTML = `
+                <td><strong>${entry.code}</strong></td>
+                <td>${entry.nombre}</td>
+                <td>${entry.proveedor}</td>
+                <td>$${entry.precioOfrecido.toFixed(4)}</td>
+                <td>${mejorPrecioActual !== null ? '$' + mejorPrecioActual.toFixed(4) : 'N/A'}</td>
+                <td>${diffHtml}</td>
+                <td><button class="danger action-btn" onclick="quitarItemCotizacionExterna(${index})">✖ Quitar</button></td>
+            `;
+            tbody.appendChild(tr);
+        });
+    }
+
+    /* --------------------------------------------------------------
+       ACEPTAR COTIZACIÓN: vuelca cada ítem de la lista externa a la
+       base oficial. Si el proveedor ya existe en ese cable, actualiza
+       su precio (respetando la misma lógica de no auto-archivar que
+       usa "Renovar": el usuario puede luego usar Renovar si quiere
+       archivar el precio anterior antes de aceptar, o simplemente
+       reemplazarlo aquí). Si el proveedor es nuevo para ese cable,
+       agrega una fila nueva.
+    -------------------------------------------------------------- */
+    function aceptarCotizacionExterna() {
+        if (!isAdmin) return alert("Activa el Modo Edición para guardar cambios en la base oficial.");
+        if (cotizacionExterna.length === 0) return alert("La lista de cotización está vacía.");
+        if (!confirm(`¿Volcar ${cotizacionExterna.length} ítem(s) de esta cotización a la base de datos oficial?`)) return;
+
+        const hoy = new Date().toISOString().split('T')[0];
+        const codigosAfectados = new Set();
+
+        cotizacionExterna.forEach(entry => {
+            let item = globalData[entry.code];
+            if (!item) {
+                item = { nombre: entry.nombre || "", precios: [], historial: [] };
+                globalData[entry.code] = item;
+            }
+            if (!Array.isArray(item) && !Array.isArray(item.precios)) item.precios = [];
+            const rows = Array.isArray(item) ? item : item.precios;
+
+            const existing = rows.find(r => r.provider === entry.proveedor);
+            if (existing) {
+                existing.price = entry.precioOfrecido;
+                existing.date = hoy;
+            } else {
+                rows.push({
+                    id: Date.now() + Math.floor(Math.random() * 1000),
+                    provider: entry.proveedor,
+                    type: "Distribuidor",
+                    brand: entry.proveedor,
+                    price: entry.precioOfrecido,
+                    date: hoy
+                });
+            }
+            codigosAfectados.add(entry.code);
+        });
+
+        codigosAfectados.forEach(code => saveCable(code));
+
+        cotizacionExterna = [];
+        renderCotizacionExterna();
+        if (currentCableCode) renderAllTables();
+        showToast(`Cotización aceptada: ${codigosAfectados.size} cable(s) actualizados en la base oficial.`);
     }
 
     // --- LIMPIEZA DE DUPLICADOS EN EL HISTORIAL ---
