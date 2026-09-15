@@ -453,6 +453,8 @@
                 statusEl.style.color = "#16a34a";
                 setTimeout(() => { statusEl.innerText = ""; }, 2500);
             }
+            // NUEVO: Notificación global muy visible para el usuario
+            showToast(`✅ Cambios guardados en ${code}`);
         });
     }
     function saveFullDb() {
@@ -596,16 +598,17 @@
 
             if (isAdmin) {
                 tr.innerHTML = `
-                    <td><input type="text" list="lista-proveedores" value="${row.provider}" onchange="updateCell('${code}', ${row.id}, 'provider', this.value.toUpperCase(), '${statusId}')" style="width:85px;"></td>
-                    <td><select onchange="updateCell('${code}', ${row.id}, 'type', this.value, '${statusId}')"><option ${row.type === 'Distribuidor' ? 'selected' : ''}>Distribuidor</option><option ${row.type === 'Fabricante' ? 'selected' : ''}>Fabricante</option></select></td>
-                    <td><input type="text" list="lista-marcas" value="${row.brand}" onchange="updateCell('${code}', ${row.id}, 'brand', this.value.toUpperCase(), '${statusId}')" style="width:80px;"></td>
-                    <td><input type="number" step="0.0001" value="${row.price}" onchange="updateCell('${code}', ${row.id}, 'price', parseFloat(this.value), '${statusId}')" style="width:70px;"></td>
+                    <td><input type="text" id="prov_${code}_${row.id}" list="lista-proveedores" value="${row.provider}" style="width:85px;"></td>
+                    <td><select id="type_${code}_${row.id}"><option ${row.type === 'Distribuidor' ? 'selected' : ''}>Distribuidor</option><option ${row.type === 'Fabricante' ? 'selected' : ''}>Fabricante</option></select></td>
+                    <td><input type="text" id="brand_${code}_${row.id}" list="lista-marcas" value="${row.brand}" style="width:80px;"></td>
+                    <td><input type="number" id="price_${code}_${row.id}" step="0.0001" value="${row.price}" style="width:70px;"></td>
                     ${totalCol}
-                    <td><input type="date" value="${row.date || ''}" onchange="updateCell('${code}', ${row.id}, 'date', this.value, '${statusId}')" style="width:105px;"></td>
+                    <td><input type="date" id="date_${code}_${row.id}" value="${row.date || ''}" style="width:105px;"></td>
                     <td>
                         <div style="display:flex; gap:5px; flex-direction:column;">
-                            <button class="action-btn" onclick="renovarHistorial('${code}', ${row.id})" title="Archivar precio anterior">🔄 Renovar</button>
-                            <button class="danger action-btn" onclick="deleteRow('${code}', ${row.id})">✖ Borrar</button>
+                            <button class="action-btn" style="background:#3b82f6;" onclick="guardarFila('${code}', ${row.id})" title="Guardar los cambios escritos en esta fila">💾 Guardar</button>
+                            <button class="action-btn" style="background:#10b981;" onclick="archivarHistorial('${code}', ${row.id})" title="Copiar el precio guardado actualmente a la gráfica">📈 Archivar a Gráfica</button>
+                            <button class="danger action-btn" onclick="deleteRow('${code}', ${row.id})">✖ Borrar Todo</button>
                             <span id="${statusId}" style="font-size: 11px; font-weight: bold; margin-top: 2px;"></span>
                         </div>
                     </td>
@@ -632,29 +635,44 @@
        botón "🔄 Renovar" archiva a propósito, cuando de verdad
        cambió el precio del proveedor en una fecha nueva.
     -------------------------------------------------------------- */
-    function updateCell(code, id, field, value, statusId) {
+    // --- 1. GUARDAR CAMBIOS MANUALES DE LA FILA ---
+    function guardarFila(code, id) {
         const item = globalData[code];
         const rows = Array.isArray(item) ? item : item.precios;
         const row = rows.find(r => r.id === id);
+        
         if (row) {
-            row[field] = value;
-            saveCable(code, statusId);
-            if (field === 'date' || field === 'price') renderAllTables();
+            // Leemos todo lo que el usuario escribió en las casillas
+            row.provider = document.getElementById(`prov_${code}_${id}`).value.trim().toUpperCase();
+            row.type = document.getElementById(`type_${code}_${id}`).value;
+            row.brand = document.getElementById(`brand_${code}_${id}`).value.trim().toUpperCase();
+            
+            const nuevoPrecio = parseFloat(document.getElementById(`price_${code}_${id}`).value);
+            if (isNaN(nuevoPrecio) || nuevoPrecio <= 0) return alert("⚠️ Precio inválido.");
+            
+            row.price = nuevoPrecio;
+            row.date = document.getElementById(`date_${code}_${id}`).value;
+
+            // Guardamos en la nube
+            saveCable(code, `status-main-${id}`);
+            showToast("💾 Fila guardada correctamente");
+            renderAllTables();
+            renderHistoryChart();
         }
     }
 
-    // --- ARCHIVA EL PRECIO ACTUAL EN EL HISTORIAL Y LO REINICIA CON FECHA DE HOY ---
-    function renovarHistorial(code, id) {
+    // --- 2. COPIAR PRECIO AL HISTORIAL ---
+    function archivarHistorial(code, id) {
         const item = globalData[code];
         const rows = Array.isArray(item) ? item : item.precios;
         const row = rows.find(r => r.id === id);
 
         if (row) {
-            const confirmar = confirm(`📄 PASO 1 DE 2:\nVas a archivar el precio actual de ${row.provider} ($${row.price}) hacia la gráfica histórica.\n\n¿Deseas guardarlo en la historia y dejar la celda lista para escribir el nuevo precio?`);
-            if(!confirmar) return;
+            if(!confirm(`¿Copiar el precio actual de $${row.price} (${row.provider}) a la gráfica histórica?\n\n(Haz esto ANTES de escribir el nuevo precio en la casilla)`)) return;
 
             if(!item.historial) item.historial = [];
-
+            
+            // Verificamos si ya existe un punto en esa misma fecha para no duplicar
             let existing = item.historial.find(h => h.date === row.date && h.provider === row.provider);
             if(existing) {
                 existing.price = row.price;
@@ -662,11 +680,9 @@
                 item.historial.push({ provider: row.provider, price: row.price, date: row.date || new Date().toISOString().split('T')[0] });
             }
 
-            row.date = new Date().toISOString().split('T')[0];
             saveCable(code);
-            
-            alert(`✅ ¡Precio archivado con éxito!\n\nPASO 2: Ahora puedes cambiar el número en la celda de precio por la nueva tarifa que te dieron hoy.`);
-            renderAllTables();
+            showToast(`📈 $${row.price} archivado en la gráfica`);
+            renderHistoryChart();
         }
     }
 
@@ -690,15 +706,37 @@
     }
 
     function deleteRow(code, id) {
-        if(!confirm("¿Borrar este proveedor permanentemente de la tabla actual?")) return;
         const item = globalData[code];
+        let providerName = "";
+
+        // Encontrar el nombre del proveedor para el mensaje
+        if (Array.isArray(item)) {
+            const row = item.find(r => r.id === id);
+            if(row) providerName = row.provider;
+        } else {
+            const row = item.precios.find(r => r.id === id);
+            if(row) providerName = row.provider;
+        }
+
+        // Una sola alerta clara y directa
+        if(!confirm(`¿Eliminar a "${providerName}" por completo?\n\nEsto lo borrará de la tabla actual y también limpiará todo su historial de la gráfica.`)) return;
+
+        // Borramos de la tabla principal
         if (Array.isArray(item)) {
             globalData[code] = item.filter(r => r.id !== id);
         } else {
             item.precios = item.precios.filter(r => r.id !== id);
         }
+
+        // Borramos del historial de la gráfica
+        if (item.historial) {
+            item.historial = item.historial.filter(h => h.provider !== providerName);
+        }
+
         saveCable(code);
+        showToast(`🗑️ Proveedor ${providerName} eliminado.`);
         renderAllTables();
+        renderHistoryChart(); 
     }
 
     // --- GRÁFICO DE HISTORIAL CON FILTROS DE TIEMPO ---
@@ -718,8 +756,20 @@
         const item = globalData[currentCableCode];
         let rawPoints = [];
 
-        if (item.historial) item.historial.forEach(h => rawPoints.push(h));
+        // 1. Identificamos los proveedores que están ACTUALMENTE VIVOS en la tabla
         const currentPrices = Array.isArray(item) ? item : (item.precios || []);
+        const proveedoresActivos = currentPrices.map(p => p.provider);
+
+        // 2. Filtramos el historial: Solo pasamos a la gráfica los que siguen en la tabla
+        if (item.historial) {
+            item.historial.forEach(h => {
+                if (proveedoresActivos.includes(h.provider)) {
+                    rawPoints.push(h);
+                }
+            });
+        }
+
+        // 3. Añadimos los precios actuales de la tabla a la gráfica
         currentPrices.forEach(p => rawPoints.push({ provider: p.provider, price: p.price, date: p.date }));
 
         // Un punto por proveedor+fecha (el más reciente gana si hay duplicados)
@@ -739,7 +789,10 @@
             return true;
         });
 
-        if (allPoints.length === 0) { document.getElementById('chartAverage').innerText = "Sin datos en este período"; return; }
+        if (allPoints.length === 0) { 
+            document.getElementById('chartAverage').innerText = "Sin datos en este período"; 
+            return; 
+        }
 
         const avg = allPoints.reduce((sum, p) => sum + p.price, 0) / allPoints.length;
         document.getElementById('chartAverage').innerText = "Promedio del Período: $" + avg.toFixed(4);
@@ -750,8 +803,10 @@
             const provData = allPoints.filter(p => p.provider === prov);
             const colors = ['#1d4ed8', '#f59e0b', '#10b981', '#6366f1', '#ef4444', '#8b5cf6'];
             return {
-                label: prov, data: provData.map(p => ({ x: p.date, y: p.price })),
-                borderColor: colors[index % colors.length], backgroundColor: colors[index % colors.length],
+                label: prov, 
+                data: provData.map(p => ({ x: p.date, y: p.price })),
+                borderColor: colors[index % colors.length], 
+                backgroundColor: colors[index % colors.length],
                 tension: 0.1, fill: false, borderWidth: 2, pointRadius: 4
             }
         });
